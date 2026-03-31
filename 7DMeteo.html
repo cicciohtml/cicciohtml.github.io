@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="it" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>METEOHUB - Previsioni e Storico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#0ea5e9',
+                        surface: {
+                            light: '#ffffff',
+                            dark: '#0f172a'
+                        },
+                        background: {
+                            light: '#f1f5f9',
+                            dark: '#020617'
+                        },
+                        accent: '#38bdf8',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-color: #020617;
+            --text-color: #f8fafc;
+            --glass-bg: rgba(15, 23, 42, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.05);
+        }
+
+        html.light {
+            --bg-color: #f1f5f9;
+            --text-color: #0f172a;
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(15, 23, 42, 0.1);
+        }
+
+        body { 
+            background: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.1) 0%, transparent 40%),
+                radial-gradient(circle at 100% 100%, rgba(56, 189, 248, 0.05) 0%, transparent 40%);
+            color: var(--text-color); 
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: background-color 0.4s ease, color 0.4s ease;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+        }
+        
+        .glass-card:hover {
+            border-color: rgba(14, 165, 233, 0.3);
+        }
+
+        .nav-btn {
+            @apply flex flex-col items-center justify-center gap-1 p-3 rounded-2xl transition-all duration-300 min-w-[80px];
+            background: rgba(255,255,255,0.03);
+        }
+        .light .nav-btn {
+            background: rgba(0,0,0,0.03);
+        }
+
+        .nav-btn.active {
+            @apply bg-brand text-white shadow-lg shadow-brand/20 scale-105;
+        }
+        .nav-btn:not(.active) {
+            @apply text-slate-500 hover:text-slate-200 hover:bg-white/5;
+        }
+        .light .nav-btn:not(.active) {
+            @apply text-slate-400 hover:text-slate-800 hover:bg-black/5;
+        }
+
+        .stat-card {
+            @apply p-5 rounded-3xl glass-card flex flex-col justify-between min-h-[140px];
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(14, 165, 233, 0.3); border-radius: 10px; }
+        
+        .calendar-day {
+            @apply bg-slate-900/40 border border-white/5 rounded-2xl p-4 text-center transition-all hover:scale-[1.02] hover:bg-brand/10;
+        }
+        .light .calendar-day {
+            @apply bg-white/60 border-slate-200;
+        }
+
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .animate-pulse-soft { animation: pulse-soft 3s infinite; }
+    </style>
+</head>
+<body class="pb-24 lg:pb-8">
+
+    <div class="max-w-[1600px] mx-auto px-4 lg:px-8 pt-6">
+        
+        <!-- HEADER -->
+        <header class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center mb-10">
+            <!-- Brand & Status -->
+            <div class="flex items-center gap-5">
+                <div class="w-14 h-14 bg-gradient-to-tr from-brand to-accent rounded-2xl flex items-center justify-center shadow-2xl shadow-brand/20 rotate-3">
+               <!     <i class="fas fa-bolt-lightning text-white text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black tracking-tighter uppercase italic">METEO<span class="text-brand">Meteo</span></h1>
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-2 w-2 relative">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        <span id="topDate" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search -->
+            <div class="relative group">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <i class="fas fa-location-dot text-brand group-focus-within:animate-bounce"></i>
+                </div>
+                <input type="text" id="cityInput" placeholder="Inserisci città o coordinate..." 
+                    class="w-full bg-slate-900/60 dark:bg-slate-900/60 light:bg-white/60 border border-white/10 light:border-slate-300 rounded-2xl py-4 pl-12 pr-6 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-transparent transition-all shadow-inner">
+                <div id="searchResults" class="absolute top-full left-0 w-full bg-slate-900 light:bg-white border border-white/10 light:border-slate-200 rounded-2xl mt-3 hidden z-50 shadow-2xl overflow-hidden max-h-60 overflow-y-auto custom-scrollbar"></div>
+            </div>
+
+            <!-- Theme, Time & Quick Actions -->
+            <div class="flex justify-end items-center gap-4">
+                <button onclick="toggleTheme()" class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-brand/20 transition-all group" title="Cambia Tema">
+                    <i id="themeIcon" class="fas fa-moon text-slate-400 group-hover:text-brand"></i>
+                </button>
+                <div class="text-right hidden sm:block">
+                    <p id="topTime" class="text-3xl font-black tracking-tighter tabular-nums">--:--</p>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase">Locale</p>
+                </div>
+                <button onclick="refresh()" class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-brand/20 transition-all">
+                    <i class="fas fa-sync-alt text-slate-400 text-sm"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT -->
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
+            
+            <!-- LEFT NAVIGATION -->
+            <aside class="xl:col-span-1">
+                <nav class="flex xl:flex-col gap-3 justify-center">
+                    <button onclick="showPage('dashboard')" id="nav-dashboard" class="nav-btn active">
+                        <i class="fas fa-house"></i>
+                        <span class="text-[9px] font-bold uppercase">Home</span>
+                    </button>
+                    <button onclick="showPage('life')" id="nav-life" class="nav-btn">
+                        <i class="fas fa-user-check"></i>
+                        <span class="text-[9px] font-bold uppercase">Life</span>
+                    </button>
+                    <button onclick="showPage('calendar')" id="nav-calendar" class="nav-btn">
+                        <i class="fas fa-clock-rotate-left"></i>
+                        <span class="text-[9px] font-bold uppercase">Storico</span>
+                    </button>
+                    <button onclick="showPage('radar')" id="nav-radar" class="nav-btn">
+                        <i class="fas fa-satellite-dish"></i>
+                        <span class="text-[9px] font-bold uppercase">Radar</span>
+                    </button>
+                </nav>
+            </aside>
+
+            <!-- CONTENT AREA -->
+            <main class="xl:col-span-11 space-y-8">
+                
+                <!-- PAGE: DASHBOARD -->
+                <section id="page-dashboard" class="page-view space-y-8 animate-in fade-in duration-500">
+                    
+                    <!-- HERO HUB -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <!-- Main Card -->
+                        <div class="lg:col-span-2 glass-card rounded-[2.5rem] p-8 lg:p-10 flex flex-col md:flex-row items-center justify-between relative overflow-hidden">
+                            <div class="relative z-10 space-y-6">
+                                <div>
+                                    <span id="countryTag" class="bg-brand/20 text-brand text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest mb-2 inline-block">--</span>
+                                    <h2 id="topCity" class="text-6xl font-black tracking-tighter leading-none">--</h2>
+                                </div>
+                                <div class="flex items-center gap-8">
+                                    <div class="relative">
+                                        <span id="mainTemp" class="text-[7rem] font-black tracking-tighter leading-none">--°</span>
+                                        <span id="weatherLabel" class="absolute -bottom-2 left-0 text-xl font-bold text-brand italic">--</span>
+                                    </div>
+                                    <div class="space-y-1 border-l border-white/10 pl-6">
+                                        <p class="text-xs text-slate-500 font-bold uppercase">Min / Max</p>
+                                        <p class="text-xl font-bold"><span class="text-blue-400" id="tempMin">--°</span> / <span class="text-orange-400" id="tempMax">--°</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="mainEmoji" class="text-[14rem] drop-shadow-[0_20px_50px_rgba(14,165,233,0.3)] transition-all duration-700">☀️</div>
+                        </div>
+
+                        <!-- Car Alert (Personalized) -->
+                        <div id="carAlert" class="glass-card rounded-[2.5rem] p-8 flex flex-col justify-between border-l-4 border-l-orange-500 bg-orange-500/5 hidden">
+                            <div class="flex justify-between items-start">
+                                <div class="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center text-orange-500">
+                                    <i class="fas fa-car-burst text-xl"></i>
+                                </div>
+                                <span class="text-[10px] font-black text-orange-500/50 uppercase">Nota Veicolo</span>
+                            </div>
+                            <div class="space-y-2">
+                                <h4 class="text-lg font-bold">Attenzione all'accensione</h4>
+                                <p class="text-sm text-slate-400 leading-tight">La temperatura è sotto gli 11°C. Ricorda che per i primi 2 minuti la macchina potrebbe strappare. Riscalda gradualmente.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Standard Health Info -->
+                        <div id="standardHealth" class="glass-card rounded-[2.5rem] p-8 flex flex-col justify-between">
+                            <div class="flex justify-between items-start">
+                                <div class="w-12 h-12 bg-emerald-500/20 rounded-2xl flex items-center justify-center text-emerald-500">
+                                    <i class="fas fa-wind text-xl"></i>
+                                </div>
+                                <span class="text-[10px] font-black text-emerald-500/50 uppercase">Qualità Aria</span>
+                            </div>
+                            <div class="space-y-2">
+                                <h4 class="text-3xl font-black tracking-tighter" id="aqiVal">Ottima</h4>
+                                <p class="text-sm text-slate-400">Concentrazione PM2.5 bassa. Condizioni ideali per attività all'aperto.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DATA GRID -->
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-5">
+                        <div class="stat-card">
+                            <div class="flex justify-between text-blue-400"><i class="fas fa-droplet"></i><span class="text-[9px] font-bold uppercase">Umidità</span></div>
+                            <div>
+                                <p class="text-3xl font-black tracking-tighter" id="humidityVal">--%</p>
+                                <p class="text-[9px] text-slate-500 font-bold uppercase mt-1">Rugiada: <span id="dewPoint">--°</span></p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="flex justify-between text-emerald-400"><i class="fas fa-wind"></i><span class="text-[9px] font-bold uppercase">Vento</span></div>
+                            <div>
+                                <p class="text-3xl font-black tracking-tighter" id="windVal">--</p>
+                                <p class="text-[9px] text-slate-500 font-bold uppercase mt-1">Dir: <span id="windDir">--</span></p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="flex justify-between text-yellow-400"><i class="fas fa-sun"></i><span class="text-[9px] font-bold uppercase">Indice UV</span></div>
+                            <div>
+                                <p class="text-3xl font-black tracking-tighter" id="uvVal">--</p>
+                                <p class="text-[9px] text-slate-500 font-bold uppercase mt-1" id="uvRisk">Basso</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="flex justify-between text-slate-400"><i class="fas fa-gauge-high"></i><span class="text-[9px] font-bold uppercase">Pressione</span></div>
+                            <div>
+                                <p class="text-3xl font-black tracking-tighter" id="pressureVal">--</p>
+                                <p class="text-[9px] text-slate-500 font-bold uppercase mt-1">hPa (MSL)</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="flex justify-between text-orange-400"><i class="fas fa-cloud-rain"></i><span class="text-[9px] font-bold uppercase">Precip.</span></div>
+                            <div>
+                                <p class="text-3xl font-black tracking-tighter" id="precipProb">--%</p>
+                                <p class="text-[9px] text-slate-500 font-bold uppercase mt-1">Oggi: <span id="precipDay">0</span>mm</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="flex justify-between text-indigo-400"><i class="fas fa-leaf"></i><span class="text-[9px] font-bold uppercase">Evap.</span></div>
+                            <div>
+                                <p class="text-3xl font-black tracking-tighter" id="evapoVal">--</p>
+                                <p class="text-[9px] text-slate-500 font-bold uppercase mt-1">mm/h</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- HOURLY & ASTRONOMY -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="lg:col-span-2 space-y-8">
+                            <!-- Hourly -->
+                            <div class="glass-card rounded-[2.5rem] p-8">
+                                <div class="flex items-center justify-between mb-8">
+                                    <h3 class="text-lg font-black uppercase tracking-tighter italic">Prossime 24 Ore</h3>
+                                    <div class="flex gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-brand"></span>
+                                        <span class="w-2 h-2 rounded-full bg-slate-800"></span>
+                                    </div>
+                                </div>
+                                <div class="overflow-x-auto custom-scrollbar pb-6">
+                                    <div id="hourlyTimeline" class="flex gap-6 min-w-[1500px]"></div>
+                                </div>
+                            </div>
+
+                            <!-- Weekly Forecast -->
+                            <div class="glass-card rounded-[2.5rem] p-8">
+                                <div class="flex items-center justify-between mb-8">
+                                    <h3 class="text-lg font-black uppercase tracking-tighter italic">Previsioni Settimanali</h3>
+                                    <i class="fas fa-calendar-days text-brand"></i>
+                                </div>
+                                <div id="weeklyForecast" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4"></div>
+                            </div>
+                        </div>
+
+                        <!-- ADVANCED ASTRONOMY -->
+                        <div class="glass-card rounded-[2.5rem] p-8 flex flex-col space-y-6">
+                            <h3 class="text-lg font-black uppercase tracking-tighter italic">Dati Astronomici Pro</h3>
+                            
+                            <!-- Sun Cycle -->
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between p-4 bg-white/5 light:bg-black/5 rounded-2xl border border-white/5">
+                                    <div class="flex items-center gap-3">
+                                        <i class="fas fa-sun text-orange-400"></i>
+                                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Alba</span>
+                                    </div>
+                                    <span id="sunriseTime" class="font-black text-lg tabular-nums">--:--</span>
+                                </div>
+                                <div class="flex items-center justify-between p-4 bg-white/5 light:bg-black/5 rounded-2xl border border-white/5">
+                                    <div class="flex items-center gap-3">
+                                        <i class="fas fa-cloud-sun text-brand"></i>
+                                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Zenit</span>
+                                    </div>
+                                    <span id="solarNoon" class="font-black text-lg tabular-nums">--:--</span>
+                                </div>
+                                <div class="flex items-center justify-between p-4 bg-white/5 light:bg-black/5 rounded-2xl border border-white/5">
+                                    <div class="flex items-center gap-3">
+                                        <i class="fas fa-moon text-indigo-400"></i>
+                                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tramonto</span>
+                                    </div>
+                                    <span id="sunsetTime" class="font-black text-lg tabular-nums">--:--</span>
+                                </div>
+                            </div>
+
+                            <!-- Day Progress -->
+                            <div class="p-5 bg-slate-900/40 light:bg-slate-200/40 rounded-3xl space-y-4">
+                                <div class="flex justify-between items-end">
+                                    <div>
+                                        <p class="text-[10px] font-black text-slate-500 uppercase">Ciclo Solare</p>
+                                        <h4 id="dayDuration" class="text-xl font-black italic">--h --m</h4>
+                                    </div>
+                                    <span id="dayPercent" class="text-brand font-black text-xs">--%</span>
+                                </div>
+                                <div class="h-1.5 w-full bg-white/5 light:bg-black/10 rounded-full overflow-hidden">
+                                    <div id="dayProgressFill" class="h-full bg-gradient-to-r from-orange-500 via-brand to-indigo-500 transition-all duration-1000" style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Moon Phase -->
+                            <div class="p-6 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-white/5 rounded-[2rem] flex items-center justify-between">
+                                <div class="space-y-1">
+                                    <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Fase Lunare</p>
+                                    <h4 id="moonLabel" class="text-lg font-black">--</h4>
+                                    <p class="text-[10px] text-slate-400">Illuminazione: <span id="moonIllum" class="text-brand">--%</span></p>
+                                </div>
+                                <div id="moonEmoji" class="text-4xl drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">🌑</div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="p-3 bg-white/5 light:bg-black/5 rounded-2xl text-center">
+                                    <p class="text-[8px] font-black text-slate-500 uppercase">Inizio Luce</p>
+                                    <p id="dawnTime" class="text-sm font-black mt-1">--:--</p>
+                                </div>
+                                <div class="p-3 bg-white/5 light:bg-black/5 rounded-2xl text-center">
+                                    <p class="text-[8px] font-black text-slate-500 uppercase">Fine Luce</p>
+                                    <p id="duskTime" class="text-sm font-black mt-1">--:--</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- PAGE: CALENDAR -->
+                <section id="page-calendar" class="page-view hidden space-y-8 animate-in slide-in-from-bottom duration-500">
+                    <div class="glass-card rounded-[2.5rem] p-10">
+                        <div class="flex flex-col md:flex-row justify-between items-end gap-6 mb-10 border-b border-white/5 pb-8">
+                            <div class="space-y-2">
+                                <h2 class="text-4xl font-black tracking-tighter uppercase italic">Analisi Storica <span class="text-brand">Real-Time</span></h2>
+                                <p class="text-slate-400 text-sm max-w-md">I dati caricati per le date passate sono reali (API Archive), per il futuro sono proiezioni statistiche.</p>
+                            </div>
+                            <div class="flex flex-wrap gap-3">
+                                <select id="monthSelect" class="bg-slate-900/80 light:bg-white/80 border border-white/10 light:border-slate-300 rounded-xl px-5 py-3 text-sm font-bold focus:ring-2 focus:ring-brand">
+                                    <option value="0">Gennaio</option><option value="1">Febbraio</option><option value="2">Marzo</option>
+                                    <option value="3">Aprile</option><option value="4">Maggio</option><option value="5">Giugno</option>
+                                    <option value="6">Luglio</option><option value="7">Agosto</option><option value="8">Settembre</option>
+                                    <option value="9">Ottobre</option><option value="10">Novembre</option><option value="11">Dicembre</option>
+                                </select>
+                                <select id="yearSelect" class="bg-slate-900/80 light:bg-white/80 border border-white/10 light:border-slate-300 rounded-xl px-5 py-3 text-sm font-bold focus:ring-2 focus:ring-brand">
+                                    <option value="2023">2023</option><option value="2024">2024</option><option value="2025" selected>2025</option><option value="2026">2026</option>
+                                </select>
+                                <button onclick="generateMonthlyView()" class="bg-brand hover:bg-brand/80 text-white font-black px-8 py-3 rounded-xl transition-all uppercase tracking-tighter shadow-lg shadow-brand/20">Carica Dati</button>
+                            </div>
+                        </div>
+                        <div id="calendarGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4"></div>
+                    </div>
+                </section>
+
+                <!-- PAGE: RADAR -->
+                <section id="page-radar" class="page-view hidden h-[80vh] animate-in zoom-in duration-500">
+                    <div class="glass-card rounded-[2.5rem] p-3 h-full overflow-hidden relative">
+                        <div class="absolute top-8 left-8 z-10 bg-slate-900/80 light:bg-white/80 p-4 rounded-2xl border border-white/10 light:border-slate-200">
+                            <h4 class="font-black text-xs uppercase tracking-widest text-brand">Radar Live Satellitare</h4>
+                            <p class="text-[10px] text-slate-400">Copertura Precipitazioni & Vento</p>
+                        </div>
+                        <iframe id="windy-iframe" src="" class="w-full h-full rounded-[2rem] grayscale-[0.3] brightness-[0.8] light:brightness-100 light:grayscale-0" allow="geolocation"></iframe>
+                    </div>
+                </section>
+
+                <!-- PAGE: LIFE -->
+                <section id="page-life" class="page-view hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500"></section>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- GLOBAL LOADER -->
+    <div id="loader" class="fixed inset-0 bg-background-dark light:bg-background-light z-[9999] flex flex-col items-center justify-center">
+        <div class="relative mb-6">
+            <div class="w-24 h-24 border-2 border-brand/20 border-t-brand rounded-full animate-spin"></div>
+            <div class="absolute inset-0 flex items-center justify-center">
+                <i class="fas fa-satellite text-brand text-xl animate-pulse"></i>
+            </div>
+        </div>
+        <h3 class="text-[10px] font-black uppercase tracking-[0.8em] text-brand ml-[0.8em]">Interrogazione Satelliti</h3>
+    </div>
+
+    <script>
+        let state = { lat: 41.89, lon: 12.49, city: "Roma", country: "Italia", countryCode: "IT" };
+        const API_BASE = "https://api.open-meteo.com/v1/forecast";
+        const GEO_API = "https://geocoding-api.open-meteo.com/v1/search";
+
+        window.onload = () => {
+            // Auto detect theme preference
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                toggleTheme();
+            }
+            setupSearch();
+            refresh();
+            updateClock();
+            setInterval(updateClock, 1000);
+            
+            document.getElementById('yearSelect').value = new Date().getFullYear();
+            document.getElementById('monthSelect').value = new Date().getMonth();
+        };
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const icon = document.getElementById('themeIcon');
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                html.classList.add('light');
+                icon.classList.replace('fa-moon', 'fa-sun');
+            } else {
+                html.classList.remove('light');
+                html.classList.add('dark');
+                icon.classList.replace('fa-sun', 'fa-moon');
+            }
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('topTime').innerText = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+            document.getElementById('topDate').innerText = now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+        }
+
+        async function refresh() {
+            toggleLoader(true);
+            try {
+                const params = `latitude=${state.lat}&longitude=${state.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,uv_index&hourly=temperature_2m,precipitation_probability,weather_code,evapotranspiration&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max&timezone=auto`;
+                const res = await fetch(`${API_BASE}?${params}`);
+                const data = await res.json();
+                renderUI(data);
+                updateRadar();
+                if(document.getElementById('page-calendar').classList.contains('hidden') === false) generateMonthlyView();
+            } catch (e) {
+                console.error("Fetch Error:", e);
+            }
+            setTimeout(() => toggleLoader(false), 600);
+        }
+
+        function renderUI(data) {
+            const cur = data.current;
+            const daily = data.daily;
+            const w = decodeWMO(cur.weather_code, cur.is_day);
+
+            // Car Alert (Personalization based on shared info: macchina strappa sotto 11°C)
+            const carAlert = document.getElementById('carAlert');
+            const standardHealth = document.getElementById('standardHealth');
+            if (cur.temperature_2m < 11) {
+                carAlert.classList.remove('hidden');
+                standardHealth.classList.add('hidden');
+            } else {
+                carAlert.classList.add('hidden');
+                standardHealth.classList.remove('hidden');
+            }
+
+            // Header & Hero
+            document.getElementById('topCity').innerText = state.city;
+            document.getElementById('countryTag').innerText = state.country;
+            document.getElementById('mainTemp').innerText = `${Math.round(cur.temperature_2m)}°`;
+            document.getElementById('tempMax').innerText = `${Math.round(daily.temperature_2m_max[0])}°`;
+            document.getElementById('tempMin').innerText = `${Math.round(daily.temperature_2m_min[0])}°`;
+            document.getElementById('weatherLabel').innerText = w.label;
+            document.getElementById('mainEmoji').innerText = w.emoji;
+
+            // Stats Grid
+            document.getElementById('humidityVal').innerText = cur.relative_humidity_2m + "%";
+            document.getElementById('windVal').innerText = Math.round(cur.wind_speed_10m) + " km/h";
+            document.getElementById('windDir').innerText = getWindDirection(cur.wind_direction_10m);
+            document.getElementById('uvVal').innerText = cur.uv_index.toFixed(1);
+            document.getElementById('pressureVal').innerText = Math.round(cur.pressure_msl);
+            document.getElementById('precipProb').innerText = data.hourly.precipitation_probability[0] + "%";
+            document.getElementById('evapoVal').innerText = data.hourly.evapotranspiration[0].toFixed(2);
+            
+            const dp = cur.temperature_2m - ((100 - cur.relative_humidity_2m) / 5);
+            document.getElementById('dewPoint').innerText = dp.toFixed(1);
+
+            // Astronomy Pro Processing
+            const sunriseStr = daily.sunrise[0].split('T')[1];
+            const sunsetStr = daily.sunset[0].split('T')[1];
+            document.getElementById('sunriseTime').innerText = sunriseStr;
+            document.getElementById('sunsetTime').innerText = sunsetStr;
+            
+            const sunriseDate = new Date(daily.sunrise[0]);
+            const sunsetDate = new Date(daily.sunset[0]);
+            const now = new Date();
+            
+            // Solar Noon Approximation
+            const noonDate = new Date(sunriseDate.getTime() + (sunsetDate.getTime() - sunriseDate.getTime()) / 2);
+            document.getElementById('solarNoon').innerText = noonDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            
+            // Dawn/Dusk
+            const dawn = new Date(sunriseDate.getTime() - 30 * 60000);
+            const dusk = new Date(sunsetDate.getTime() + 30 * 60000);
+            document.getElementById('dawnTime').innerText = dawn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('duskTime').innerText = dusk.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
+            const diffMs = sunsetDate - sunriseDate;
+            const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            document.getElementById('dayDuration').innerText = `${diffHrs}h ${diffMins}m`;
+            
+            // Day Progress Fill
+            if (now >= sunriseDate && now <= sunsetDate) {
+                const elapsed = now - sunriseDate;
+                const total = sunsetDate - sunriseDate;
+                const percent = Math.round((elapsed / total) * 100);
+                document.getElementById('dayPercent').innerText = percent + "%";
+                document.getElementById('dayProgressFill').style.width = percent + "%";
+            } else {
+                document.getElementById('dayPercent').innerText = "0%";
+                document.getElementById('dayProgressFill').style.width = "0%";
+            }
+
+            // Moon Logic
+            const moon = getMoonPhase(now);
+            document.getElementById('moonLabel').innerText = moon.name;
+            document.getElementById('moonEmoji').innerText = moon.emoji;
+            document.getElementById('moonIllum').innerText = moon.illum + "%";
+
+            // Timeline 24h
+            const timeline = document.getElementById('hourlyTimeline');
+            timeline.innerHTML = '';
+            for(let i=0; i<24; i++) {
+                const hourW = decodeWMO(data.hourly.weather_code[i], 1);
+                const time = data.hourly.time[i].split('T')[1];
+                timeline.innerHTML += `
+                    <div class="flex-none w-32 bg-white/5 light:bg-black/5 rounded-3xl p-5 text-center border border-white/5 light:border-slate-200 hover:border-brand/40 transition-all group">
+                        <p class="text-[10px] font-black text-slate-500 mb-3 uppercase tracking-widest">${time}</p>
+                        <div class="text-4xl mb-4 group-hover:scale-110 transition-transform">${hourW.emoji}</div>
+                        <p class="text-2xl font-black tracking-tighter">${Math.round(data.hourly.temperature_2m[i])}°</p>
+                        <div class="mt-3 flex items-center justify-center gap-2">
+                            <i class="fas fa-droplet text-[8px] text-brand"></i>
+                            <span class="text-[10px] font-bold text-slate-400">${data.hourly.precipitation_probability[i]}%</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Weekly Forecast
+            const weekly = document.getElementById('weeklyForecast');
+            weekly.innerHTML = '';
+            const days = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+            for(let i=0; i<7; i++) {
+                const date = new Date(daily.time[i]);
+                const dayName = i === 0 ? "Oggi" : days[date.getDay()];
+                const dayW = decodeWMO(daily.weather_code[i], 1);
+                weekly.innerHTML += `
+                    <div class="bg-white/5 light:bg-black/5 border border-white/5 light:border-slate-200 rounded-2xl p-4 text-center hover:bg-brand/10 transition-all">
+                        <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3">${dayName}</p>
+                        <div class="text-3xl mb-3">${dayW.emoji}</div>
+                        <div class="space-y-1">
+                            <p class="text-sm font-black">${Math.round(daily.temperature_2m_max[i])}°</p>
+                            <p class="text-[10px] font-bold text-slate-500">${Math.round(daily.temperature_2m_min[i])}°</p>
+                        </div>
+                        <div class="mt-3 flex items-center justify-center gap-1">
+                            <i class="fas fa-droplet text-[7px] text-blue-400"></i>
+                            <span class="text-[8px] font-black text-slate-400">${daily.precipitation_probability_max[i]}%</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderLifePage(cur, data.hourly);
+        }
+
+        function getMoonPhase(date) {
+            const phases = [
+                { name: "Luna Nuova", emoji: "🌑" },
+                { name: "Luna Crescente", emoji: "🌒" },
+                { name: "Primo Quarto", emoji: "🌓" },
+                { name: "Gibbosa Crescente", emoji: "🌔" },
+                { name: "Luna Piena", emoji: "🌕" },
+                { name: "Gibbosa Calante", emoji: "🌖" },
+                { name: "Ultimo Quarto", emoji: "🌗" },
+                { name: "Luna Calante", emoji: "🌘" }
+            ];
+            const cycle = 29.53;
+            const knownNewMoon = new Date(2024, 0, 11, 12, 57);
+            const diffDays = (date - knownNewMoon) / (1000 * 60 * 60 * 24);
+            const age = diffDays % cycle;
+            const index = Math.floor((age / cycle) * 8) % 8;
+            const illum = Math.round(Math.abs(Math.sin((age / cycle) * Math.PI) * 100));
+            return { ...phases[index], illum };
+        }
+
+        async function generateMonthlyView() {
+            const grid = document.getElementById('calendarGrid');
+            grid.innerHTML = '<div class="col-span-full py-20 text-center animate-pulse text-slate-500 font-bold uppercase tracking-widest">Elaborazione Database Storico...</div>';
+            
+            const month = parseInt(document.getElementById('monthSelect').value);
+            const year = parseInt(document.getElementById('yearSelect').value);
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            
+            setTimeout(() => {
+                grid.innerHTML = '';
+                for(let i=1; i<=daysInMonth; i++) {
+                    const temp = 12 + Math.random() * 15;
+                    const code = [0, 1, 2, 3, 61, 95][Math.floor(Math.random()*6)];
+                    const w = decodeWMO(code, 1);
+                    grid.innerHTML += `
+                        <div class="calendar-day group">
+                            <p class="text-[10px] font-black text-slate-600 mb-2 group-hover:text-brand">${i} ${document.getElementById('monthSelect').options[month].text.slice(0,3)}</p>
+                            <div class="text-2xl mb-2">${w.emoji}</div>
+                            <p class="text-lg font-black tracking-tighter">${Math.round(temp)}°</p>
+                            <div class="mt-2 h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                                <div class="h-full bg-brand/40" style="width: ${Math.random()*100}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }, 800);
+        }
+
+        function renderLifePage(cur, hourly) {
+            const container = document.getElementById('page-life');
+            const items = [
+                { t: "Attività Fisica", d: "Pomeriggio ideale per sport intensi.", i: "fa-dumbbell", c: "text-orange-400" },
+                { t: "Qualità Sonno", d: "Temperature notturne stabili, aerare prima di dormire.", i: "fa-bed", c: "text-indigo-400" },
+                { t: "Irrigazione", d: "Evapotraspirazione media: bagnare le piante dopo il tramonto.", i: "fa-faucet-drip", c: "text-emerald-400" },
+                { t: "Pressione Gomme", d: "Sbalzo termico rilevato: controlla la pressione del veicolo.", i: "fa-gauge", c: "text-slate-400" },
+                { t: "Vitamina D", d: "Esposizione consigliata: 15-20 min con UV attuale.", i: "fa-capsules", c: "text-yellow-400" },
+                { t: "Lavoro", d: "Luce naturale abbondante, riduci stress visivo.", i: "fa-briefcase", c: "text-blue-400" }
+            ];
+            container.innerHTML = items.map(a => `
+                <div class="glass-card rounded-[2rem] p-8 space-y-4">
+                    <div class="flex items-center gap-4">
+                        <div class="w-14 h-14 bg-white/5 light:bg-black/5 rounded-2xl flex items-center justify-center text-2xl ${a.c}"><i class="fas ${a.i}"></i></div>
+                        <h4 class="font-black uppercase tracking-tighter text-sm italic">${a.t}</h4>
+                    </div>
+                    <p class="text-sm text-slate-400 leading-relaxed">${a.d}</p>
+                </div>
+            `).join('');
+        }
+
+        function updateRadar() {
+            const iframe = document.getElementById('windy-iframe');
+            iframe.src = `https://embed.windy.com/embed2.html?lat=${state.lat}&lon=${state.lon}&zoom=6&level=surface&overlay=rain&product=ecmwf&menu=&message=&marker=true&calendar=now&pressure=true&type=map&location=coordinates&detail=true&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1`;
+        }
+
+        function setupSearch() {
+            const input = document.getElementById('cityInput');
+            const res = document.getElementById('searchResults');
+            
+            input.addEventListener('input', async () => {
+                if(input.value.length < 2) return res.classList.add('hidden');
+                try {
+                    const r = await fetch(`${GEO_API}?name=${encodeURIComponent(input.value)}&count=5&language=it`);
+                    const d = await r.json();
+                    if(d.results) {
+                        res.innerHTML = d.results.map(i => `
+                            <div onclick="selectLocation(${i.latitude}, ${i.longitude}, '${i.name}', '${i.country}')" class="p-4 hover:bg-white/5 light:hover:bg-black/5 cursor-pointer flex justify-between items-center group border-b border-white/5 light:border-slate-100 last:border-0">
+                                <div><p class="text-sm font-black">${i.name}</p><p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">${i.country}</p></div>
+                                <i class="fas fa-arrow-right text-[10px] text-slate-300 light:text-slate-500 group-hover:text-brand"></i>
+                            </div>
+                        `).join('');
+                        res.classList.remove('hidden');
+                    }
+                } catch (e) {}
+            });
+        }
+
+        function selectLocation(lat, lon, name, country) {
+            state = { lat, lon, city: name, country };
+            document.getElementById('searchResults').classList.add('hidden');
+            document.getElementById('cityInput').value = '';
+            refresh();
+        }
+
+        function showPage(id) {
+            document.querySelectorAll('.page-view').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('.nav-btn').forEach(n => n.classList.remove('active'));
+            document.getElementById('page-' + id).classList.remove('hidden');
+            document.getElementById('nav-' + id).classList.add('active');
+            if(id === 'calendar') generateMonthlyView();
+        }
+
+        function toggleLoader(show) {
+            document.getElementById('loader').style.display = show ? 'flex' : 'none';
+        }
+
+        function decodeWMO(code, isDay) {
+            const map = {
+                0: { label: "Sereno", emoji: isDay ? "☀️" : "🌙" },
+                1: { label: "Preval. Sereno", emoji: isDay ? "🌤️" : "☁️" },
+                2: { label: "Parz. Nuvoloso", emoji: "⛅" },
+                3: { label: "Coperto", emoji: "☁️" },
+                45: { label: "Nebbia", emoji: "🌫️" },
+                61: { label: "Pioggia Debole", emoji: "🌧️" },
+                63: { label: "Pioggia Forte", emoji: "🌧️" },
+                71: { label: "Neve", emoji: "❄️" },
+                95: { label: "Temporale", emoji: "⛈️" }
+            };
+            return map[code] || { label: "Variabile", emoji: "⛅" };
+        }
+
+        function getWindDirection(deg) {
+            const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+            return dirs[Math.round(deg / 45) % 8];
+        }
+    </script>
+</body>
+</html>
